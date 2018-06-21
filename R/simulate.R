@@ -21,7 +21,8 @@ make_W_t <- function(N) {
 # N must have natural root
 simulate_data <- function(N, TT, G, count,
                           rho_vec, lambda_vec, gamma_vec,
-                          beta.ls, sigma2_vec) {
+                          beta.ls, sigma2_vec, 
+                          X_params = c(0, 1)) {
   
   if (!count) {
     sigma2_vec <- rep(1, G)
@@ -52,7 +53,7 @@ simulate_data <- function(N, TT, G, count,
   X.ls <- vector('list', G)
   for (k in 1:G) {
     K <- length(beta.ls[[k]])
-    X <- cbind(1, matrix(rnorm((K-1)*N*TT), N*TT, K-1))
+    X <- cbind(1, matrix(rnorm((K-1)*N*TT, X_params[1], X_params[2]), N*TT, K-1))
     X.ls[[k]] <- X
   }
   X <- make_X(X_list = X.ls, N = N, TT = TT)
