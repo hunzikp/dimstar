@@ -416,7 +416,8 @@ scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N,
 
 p <- ggplot(data=scal.dt, aes(x=N, y=elapsed, group=model)) +
   geom_line(aes(linetype=model)) +
-  geom_point(aes(shape=model)) + xlab("N") + ylab("Estimation Time")
+  geom_point(aes(shape=model)) + xlab("N") + ylab("Estimation Time") +
+  theme(legend.position="bottom")
 ggsave(filename = "plots/mc_sprobit_complexity.pdf", plot = p)
 
 
