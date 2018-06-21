@@ -8,26 +8,11 @@ library(spatialprobit)
 library(McSpatial)
 library(foreach)
 library(doMC)
-registerDoMC(6)
+registerDoMC(10)
 
-###################
-# Set up configurations
-###################
-
-## Constants
-M <- 30
-BAYES_MAX <- 1024
-GMM_MAX <- 1024
-EM_MAX <- 1024
-config.df <- expand.grid(N = c(64, 256, 1024),
-                         rho = c(0, 0.5, 0.8),
-                         beta0 = c(0),
-                         beta1 = c(2),
-                         seed = 1:M,
-                         model = c("dimstar", "bayes", "gmm", "em"),
-                         stringsAsFactors = FALSE)
-config.ls <- split(config.df, seq(nrow(config.df)))
-
+#################################################
+# FUNCTION DEFS
+#################################################
 
 ###################
 # Data creation function
@@ -56,7 +41,7 @@ fit_dimstar <- function(data) {
                       spatial_dep = TRUE, 
                       temporal_dep = FALSE, 
                       outcome_dep = FALSE)
-
+  
   timing <- system.time({
     res <- try({
       set.seed(0)
@@ -231,6 +216,29 @@ fit_em <- function(data) {
   return(results)
 }
 
+#################################################
+# I. EVALUATE BIAS / RMSE
+#################################################
+
+###################
+# Set up configurations
+###################
+
+## Constants
+M <- 30
+BAYES_MAX <- 1024
+GMM_MAX <- 1024
+EM_MAX <- 1024
+
+## Configs
+config.df <- expand.grid(N = c(64, 1024),
+                         rho = c(0, 0.5, 0.8),
+                         beta0 = c(0),
+                         beta1 = c(2),
+                         seed = 1:M,
+                         model = c("dimstar", "bayes", "gmm"),
+                         stringsAsFactors = FALSE)
+config.ls <- split(config.df, seq(nrow(config.df)))
 
 ###################
 # Main MC Loop
@@ -257,17 +265,12 @@ results.ls <- foreach(config = iter(config.ls)) %dopar% {
 }
 
 ###################
-# Concatenate results
+# Concatenate & save results
 ###################
 
 results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x)))
 results.df <- cbind(config.df, results.df)
-
-
-## Stats:
-#   - Bias / RMSE for rho (and potentially beta1)
-#   - Coverage prob
-#   - Scalability: N vs run-time
+saveRDS(results.df, file = 'results/mc_sprobit_rmse.rds')
 
 
 ###################
@@ -286,7 +289,7 @@ rho_bias.df$N_label <- paste0('N = ', rho_bias.df$N)
 p <- ggplot(rho_bias.df, aes(x=model, y=rb)) +  geom_violin()
 p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
 p <- p + facet_grid(rho_label ~ N_label) + xlab("") + ylab("rho bias")
-p
+ggsave(filename = "plots/mc_sprobit_rhobias.pdf", plot = p)
 
 ## Beta bias
 beta_bias.df <- results.df[results.df$model != 'em',]
@@ -298,7 +301,8 @@ beta_bias.df$N_label <- paste0('N = ', beta_bias.df$N)
 p <- ggplot(beta_bias.df, aes(x=model, y=bb)) +  geom_violin()
 p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
 p <- p + facet_grid(rho_label ~ N_label) + xlab("") + ylab("beta1 bias")
-p
+ggsave(filename = "plots/mc_sprobit_betabias.pdf", plot = p)
+
 
 ###################
 # Summarize bias / RMSE
@@ -316,13 +320,14 @@ beta_bias.dt <- results.dt
 beta_bias.dt$rb <- beta_bias.dt$beta1_est - rho_bias.dt$beta1
 beta_bias.dt[, j=list(bias = mean(rb, na.rm = TRUE), rm = rmse(rb)),by = list(rho, N, model)]
 
+
 ###################
 # Coverage prob
 ###################
 library(data.table)
 
 ## Coverage of rho
-rc.df <- results.df[,c('N', 'model', 'rho', 'rho_hi', 'rho_lo')]
+rc.df <- results.df[results.df$model != 'em', c('N', 'model', 'rho', 'rho_hi', 'rho_lo')]
 rc.df$rho_hit <- rc.df$rho < rc.df$rho_hi & rc.df$rho > rc.df$rho_lo
 rc.dt <- data.table(rc.df)
 rc.dt <- rc.dt[, .(hit_sum = sum(rho_hit, na.rm = TRUE), hit_trial = sum(!is.na(rho_hit))), by = .(N,model,rho)]
@@ -342,3 +347,77 @@ p <- p + geom_bar(aes(weight = hit_prop))
 p <- p + geom_errorbar(aes(ymin=lo, ymax=hi), width = 0.2)
 p <- p + facet_grid(rho ~ N) + geom_hline(yintercept = 0.9, linetype = 2, size = 0.25)
 p
+
+
+
+#################################################
+# II. EVALUATE RUNTIME / COMPLEXITY
+#################################################
+
+###################
+# Set up configurations
+###################
+
+## Constants
+M <- 2
+BAYES_MAX <- 4096
+GMM_MAX <- 1600
+EM_MAX <- 1600
+
+## Configs
+config.df <- expand.grid(N = seq(8, 64, by = 8)^2,
+                         rho = c(0.5),
+                         beta0 = c(0),
+                         beta1 = c(2),
+                         seed = 1:M,
+                         model = c("dimstar", "bayes", "gmm"),
+                         stringsAsFactors = FALSE)
+config.ls <- split(config.df, seq(nrow(config.df)))
+
+###################
+# Main MC Loop
+###################
+
+results.ls <- foreach(config = iter(config.ls)) %dopar% {
+  
+  ## Generate data
+  data <- sample_data(config)
+  
+  ## Fit approrpiate model
+  if (config$model == 'dimstar') {
+    results <- fit_dimstar(data)
+  } else if (config$model == 'bayes') {
+    results <- fit_bayes(data)
+  } else if (config$model == 'gmm') {
+    results <- fit_gmm(data)
+  } else if (config$model == 'em') {
+    results <- fit_em(data)
+  }
+  
+  ## Return result
+  results
+}
+
+###################
+# Concatenate & save results
+###################
+
+results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x)))
+results.df <- cbind(config.df, results.df)
+saveRDS(results.df, file = 'results/mc_sprobit_complexity.rds')
+
+
+###################
+# Plot Scalability
+###################
+
+scal.dt <- data.table(results.df[results.df$model != 'em',])
+scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, model)]
+
+p <- ggplot(data=scal.dt, aes(x=N, y=elapsed, group=model)) +
+  geom_line(aes(linetype=model)) +
+  geom_point(aes(shape=model)) + xlab("N") + ylab("Estimation Time")
+ggsave(filename = "plots/mc_sprobit_complexity.pdf", plot = p)
+
+
+
