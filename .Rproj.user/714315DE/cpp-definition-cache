@@ -1,0 +1,62 @@
+[
+    {
+        "definitions" : [
+            {
+                "column" : 7,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 2,
+                "line" : 11,
+                "name" : "Kernel",
+                "parent_name" : "",
+                "usr" : "c:@C@Kernel"
+            },
+            {
+                "column" : 10,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 7,
+                "line" : 50,
+                "name" : "make_A(NumericVector, NumericVector, NumericVector)",
+                "parent_name" : "Kernel",
+                "usr" : "c:@C@Kernel@F@make_A#$@N@Rcpp@C@Vector>#VI14#@N@Rcpp@CT>1#T@PreserveStorage#S0_#S0_#"
+            },
+            {
+                "column" : 10,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 7,
+                "line" : 61,
+                "name" : "make_A_t(NumericVector, NumericVector)",
+                "parent_name" : "Kernel",
+                "usr" : "c:@C@Kernel@F@make_A_t#$@N@Rcpp@C@Vector>#VI14#@N@Rcpp@CT>1#T@PreserveStorage#S0_#"
+            },
+            {
+                "column" : 8,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 7,
+                "line" : 72,
+                "name" : "update_ystar_sample(mat)",
+                "parent_name" : "Kernel",
+                "usr" : "c:@C@Kernel@F@update_ystar_sample#$@N@arma@C@Mat>#d#"
+            },
+            {
+                "column" : 10,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 7,
+                "line" : 77,
+                "name" : "get_E_kernel(NumericVector, NumericVector, NumericVector, colvec, colvec)",
+                "parent_name" : "Kernel",
+                "usr" : "c:@C@Kernel@F@get_E_kernel#$@N@Rcpp@C@Vector>#VI14#@N@Rcpp@CT>1#T@PreserveStorage#S0_#S0_#$@N@arma@C@Col>#d#S1_#"
+            },
+            {
+                "column" : 10,
+                "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+                "kind" : 7,
+                "line" : 94,
+                "name" : "get_kernel_i(NumericVector, NumericVector, NumericVector, colvec, colvec, int)",
+                "parent_name" : "Kernel",
+                "usr" : "c:@C@Kernel@F@get_kernel_i#$@N@Rcpp@C@Vector>#VI14#@N@Rcpp@CT>1#T@PreserveStorage#S0_#S0_#$@N@arma@C@Col>#d#S1_#I#"
+            }
+        ],
+        "file" : "/home/hunzikp/Projects/spatiallogit/dimstar/src/kernel.cpp",
+        "file_last_write" : 1529511215
+    }
+]

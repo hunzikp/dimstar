@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1529540630484.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "ED769A88",
+    "lastKnownWriteTime" : 1529546839,
+    "last_content_update" : 1529546839539,
+    "path" : "~/Projects/spatiallogit/dimstar/scripts/mc_sprobit.R",
+    "project_path" : "scripts/mc_sprobit.R",
+    "properties" : {
+        "cursorPosition" : "210,0",
+        "scrollLine" : "171",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 9,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

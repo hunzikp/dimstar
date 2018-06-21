@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1529512329631.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "766785920",
+    "id" : "6349E412",
+    "lastKnownWriteTime" : 1529545036,
+    "last_content_update" : 1529545036113,
+    "path" : "~/Projects/spatiallogit/dimstar/R/dimstar.R",
+    "project_path" : "R/dimstar.R",
+    "properties" : {
+        "cursorPosition" : "355,48",
+        "scrollLine" : "346"
+    },
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

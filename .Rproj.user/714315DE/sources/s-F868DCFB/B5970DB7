@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1529513301463.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2176285664",
+    "id" : "B5970DB7",
+    "lastKnownWriteTime" : 1529545051,
+    "last_content_update" : 1529545051038,
+    "path" : "~/Projects/spatiallogit/dimstar/scripts/tests.R",
+    "project_path" : "scripts/tests.R",
+    "properties" : {
+        "cursorPosition" : "71,27",
+        "scrollLine" : "57",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

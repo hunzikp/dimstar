@@ -1,0 +1,19 @@
+sksparse <- reticulate::import("sksparse")
+
+start <- proc.time()
+factor = sksparse$cholmod$cholesky(reticulate::r_to_py(t(A_t)%*%A_t))
+ld = factor$logdet()
+proc.time() - start
+
+AtA <- reticulate::r_to_py(t(A_t)%*%A_t)
+start <- proc.time()
+factor$cholesky_inplace(AtA)
+ld = factor$logdet()
+proc.time() - start
+
+
+start <- proc.time()
+Apy <- reticulate::r_to_py(A_t)
+factor <- sksparse$cholmod$cholesky_AAt(Apy)
+factor$logdet()
+proc.time() - start
