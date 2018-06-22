@@ -88,7 +88,8 @@ simulate_data <- function(N, TT, G, count,
   }
   
   ## Prepare return list
-  out <- list(y.ls = y.ls, X.ls = X.ls, W_t = W_t, ystar = ystar, A = A, N = N, G = G, TT = TT)
+  out <- list(y.ls = y.ls, X.ls = X.ls, W_t = W_t, ystar = ystar, A = A, 
+              N = N, G = G, TT = TT, count = count)
   
   return(out)
 }
