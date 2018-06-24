@@ -549,7 +549,7 @@ p <- ggplot(data=scal.dt, aes(x=N, y=elapsed)) +
   xlab("N") + ylab("Evaluation Time (seconds)") +
   theme(legend.position="bottom")
 p
-ggsave(filename = "plots/mc_full_time_N.pdf", plot = p)
+ggsave(filename = "plots/mc_full_time_N.pdf", plot = p, scale = 0.5)
 
 
 ###################
@@ -568,7 +568,7 @@ p <- ggplot(data=scal.dt, aes(x=TT, y=elapsed)) +
   geom_point() + 
   xlab("T") + ylab("Evaluation Time (seconds)")
 p
-ggsave(filename = "plots/mc_full_time_T.pdf", plot = p)
+ggsave(filename = "plots/mc_full_time_T.pdf", plot = p, scale = 0.5)
 
 ###################
 # Plot Scalability in G
@@ -586,5 +586,5 @@ p <- ggplot(data=scal.dt, aes(x=G, y=elapsed)) +
   geom_point() + 
   xlab("G") + ylab("Estimation Time")
 p
-ggsave(filename = "plots/mc_full_time_G.pdf", plot = p)
+ggsave(filename = "plots/mc_full_time_G.pdf", plot = p, scale = 0.5)
 
