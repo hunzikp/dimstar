@@ -470,24 +470,41 @@ fit_dimstar <- function(data) {
 ###################
 
 ## Constants
-M <- 10
+M <- 5
 
 ## Configs
-config.df <- expand.grid(data_dim = list(list(N = 64, TT = 1, G = 1), 
+config.df <- expand.grid(data_dim = list(list(N = 64, TT = 1, G = 1),
+                                         list(N = 144, TT = 1, G = 1),
                                          list(N = 256, TT = 1, G = 1),
-                                         list(N = 576, TT = 1, G = 1),
-                                         list(N = 1024, TT = 1, G = 1),
-                                         list(N = 1600, TT = 1, G = 1), 
-                                         list(N = 2304, TT = 1, G = 1), 
-                                         list(N = 3136, TT = 1, G = 1), 
-                                         list(N = 4096, TT = 1, G = 1), 
+                                         list(N = 400, TT = 1, G = 1), 
+                                         list(N = 576, TT = 1, G = 1), 
+                                         list(N = 784, TT = 1, G = 1), 
+                                         list(N = 1024, TT = 1, G = 1), 
+                                         
+                                         list(N = 64, TT = 1, G = 4),
+                                         list(N = 144, TT = 1, G = 4),
+                                         list(N = 256, TT = 1, G = 4),
+                                         list(N = 400, TT = 1, G = 4), 
+                                         list(N = 576, TT = 1, G = 4), 
+                                         list(N = 784, TT = 1, G = 4), 
+                                         list(N = 1024, TT = 1, G = 4), 
+                                         
                                          list(N = 64, TT = 4, G = 1), 
+                                         list(N = 64, TT = 8, G = 1),
+                                         list(N = 64, TT = 12, G = 1),
                                          list(N = 64, TT = 16, G = 1),
-                                         list(N = 64, TT = 36, G = 1),
-                                         list(N = 64, TT = 64, G = 1),
-                                         list(N = 64, TT = 100, G = 1),
-                                         list(N = 64, TT = 144, G = 1),
-                                         list(N = 64, TT = 196, G = 1),
+                                         list(N = 64, TT = 20, G = 1),
+                                         list(N = 64, TT = 24, G = 1),
+                                         list(N = 64, TT = 48, G = 1),
+                                         
+                                         list(N = 64, TT = 4, G = 4), 
+                                         list(N = 64, TT = 8, G = 4),
+                                         list(N = 64, TT = 12, G = 4),
+                                         list(N = 64, TT = 16, G = 4),
+                                         list(N = 64, TT = 20, G = 4),
+                                         list(N = 64, TT = 24, G = 4),
+                                         list(N = 64, TT = 48, G = 4),
+                                         
                                          list(N = 64, TT = 1, G = 4),
                                          list(N = 64, TT = 1, G = 8),
                                          list(N = 64, TT = 1, G = 12),
@@ -540,12 +557,15 @@ scal.df <- results.df
 scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
 scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
 scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$TT == 1 & scal.df$G == 1,])
-scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N)]
+scal.dt <- data.table(scal.df[scal.df$TT == 1 & scal.df$G <= 3,])
+scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, G)]
 
-p <- ggplot(data=scal.dt, aes(x=N, y=elapsed)) +
-  geom_line() +
-  geom_point() +
+scal.dt$G <- as.factor(scal.dt$G)
+
+p <- ggplot(data=scal.dt, aes(x=N, y=elapsed, group = G)) +
+  geom_line(aes(linetype=G)) +
+  geom_point(aes(shape=G)) + xlab("N") +
+  theme(legend.position="bottom") + 
   xlab("N") + ylab("Evaluation Time (seconds)") +
   theme(legend.position="bottom")
 p
@@ -560,13 +580,17 @@ scal.df <- results.df
 scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
 scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
 scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$G == 1,])
-scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(TT)]
+scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$G <= 2,])
+scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(TT, G)]
 
-p <- ggplot(data=scal.dt, aes(x=TT, y=elapsed)) +
-  geom_line() + 
-  geom_point() + 
-  xlab("T") + ylab("Evaluation Time (seconds)")
+scal.dt$G <- as.factor(scal.dt$G)
+
+p <- ggplot(data=scal.dt, aes(x=TT, y=elapsed, group = G)) +
+  geom_line(aes(linetype=G)) +
+  geom_point(aes(shape=G)) + xlab("N") +
+  theme(legend.position="bottom") + 
+  xlab("T") + ylab("Evaluation Time (seconds)") +
+  theme(legend.position="bottom")
 p
 ggsave(filename = "plots/mc_full_time_T.pdf", plot = p, scale = 0.5)
 
@@ -584,7 +608,7 @@ scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(G)
 p <- ggplot(data=scal.dt, aes(x=G, y=elapsed)) +
   geom_line() + 
   geom_point() + 
-  xlab("G") + ylab("Estimation Time")
+  xlab("G") + ylab("Evaluation Time (seconds)")
 p
 ggsave(filename = "plots/mc_full_time_G.pdf", plot = p, scale = 0.5)
 
