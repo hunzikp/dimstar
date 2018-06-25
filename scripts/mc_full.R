@@ -451,11 +451,21 @@ fit_dimstar <- function(data) {
                       outcome_dep = outcome_dep)
   model$sample_ystar(M = 50, ystar_init = colMeans(model$ystar_sample))
   
+  model$rho_vec[] <- 0.25
+  if (temporal_dep) {
+    model$gamma_vec[] <- 0.25
+  }
+  if (outcome_dep) {
+    model$lambda_vec[] <- 0.25
+  }
+  model$beta.ls <- rep(list(c(2 ,1)), data$G)
+  
   timing <- system.time({
     res <- try({
       set.seed(0)
-      # model$train(maxiter = 1, M = 50, abs_tol = 1e-4, burnin = 0, thinning = 1)
-      ll <- model$E_llik(theta = model$pack_theta())
+      for (i in 1:5) {
+        ll <- model$E_llik(theta = model$pack_theta())
+      }
     }, silent = TRUE)
   })
   
@@ -470,11 +480,10 @@ fit_dimstar <- function(data) {
 ###################
 
 ## Constants
-M <- 5
+M <- 1
 
 ## Configs
 config.df <- expand.grid(data_dim = list(list(N = 64, TT = 1, G = 1),
-                                         list(N = 144, TT = 1, G = 1),
                                          list(N = 256, TT = 1, G = 1),
                                          list(N = 400, TT = 1, G = 1), 
                                          list(N = 576, TT = 1, G = 1), 
@@ -482,7 +491,6 @@ config.df <- expand.grid(data_dim = list(list(N = 64, TT = 1, G = 1),
                                          list(N = 1024, TT = 1, G = 1), 
                                          
                                          list(N = 64, TT = 1, G = 4),
-                                         list(N = 144, TT = 1, G = 4),
                                          list(N = 256, TT = 1, G = 4),
                                          list(N = 400, TT = 1, G = 4), 
                                          list(N = 576, TT = 1, G = 4), 
@@ -523,9 +531,9 @@ config.ls <- split(config.df, seq(nrow(config.df)))
 # Main MC Loop
 ###################
 
-results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) %dopar% {
+results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) %do% {
   
-  # print(paste(config$iter, '/', nrow(config.df)))
+  print(paste(config$iter, '/', nrow(config.df)))
   
   ## Generate data
   data <- sample_data(config)
@@ -547,29 +555,36 @@ results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x[le
 results.df <- cbind(config.df, results.df)
 saveRDS(results.df, file = 'results/mc_full_complexity_count.rds')
 
+
 ###################
 # Plot Scalability in N
 ###################
 library(data.table)
 library(ggplot2)
+library(gridExtra)
 
 scal.df <- results.df
 scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
 scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
 scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$TT == 1 & scal.df$G <= 3,])
+scal.dt <- data.table(scal.df[scal.df$TT == 1 & scal.df$G <= 4,])
 scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, G)]
 
-scal.dt$G <- as.factor(scal.dt$G)
+scal.dt$Glab <- paste('G =', scal.dt$G)
 
-p <- ggplot(data=scal.dt, aes(x=N, y=elapsed, group = G)) +
-  geom_line(aes(linetype=G)) +
-  geom_point(aes(shape=G)) + xlab("N") +
-  theme(legend.position="bottom") + 
-  xlab("N") + ylab("Evaluation Time (seconds)") +
-  theme(legend.position="bottom")
-p
-ggsave(filename = "plots/mc_full_time_N.pdf", plot = p, scale = 0.5)
+## Plot for G = 1 and G > 1
+p1 <- ggplot(data=scal.dt[scal.dt$G == 1,], aes(x=N, y=elapsed)) +
+  geom_line() +
+  geom_point() + xlab("N") +
+  facet_grid( ~ Glab) +
+  xlab("N") + ylab("Evaluation Time (seconds)")
+p2 <- ggplot(data=scal.dt[scal.dt$G == 4,], aes(x=N, y=elapsed)) +
+  geom_line() +
+  geom_point() + xlab("N") +
+  facet_grid( ~ Glab) +
+  xlab("N") + ylab("Evaluation Time (seconds)")
+p <- arrangeGrob(p1, p2, nrow=1, ncol=2) 
+ggsave(filename = "plots/mc_full_time_N.pdf", plot = p, scale = 0.75)
 
 
 ###################
@@ -580,19 +595,24 @@ scal.df <- results.df
 scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
 scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
 scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$G <= 2,])
+scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$G <= 4,])
 scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(TT, G)]
 
-scal.dt$G <- as.factor(scal.dt$G)
+scal.dt$Glab <- paste('G =', scal.dt$G)
 
-p <- ggplot(data=scal.dt, aes(x=TT, y=elapsed, group = G)) +
-  geom_line(aes(linetype=G)) +
-  geom_point(aes(shape=G)) + xlab("N") +
-  theme(legend.position="bottom") + 
-  xlab("T") + ylab("Evaluation Time (seconds)") +
-  theme(legend.position="bottom")
-p
-ggsave(filename = "plots/mc_full_time_T.pdf", plot = p, scale = 0.5)
+## Plot for G = 1 and G > 1
+p1 <- ggplot(data=scal.dt[scal.dt$G == 1,], aes(x=TT, y=elapsed)) +
+  geom_line() +
+  geom_point() + 
+  facet_grid( ~ Glab) +
+  xlab("T") + ylab("Evaluation Time (seconds)")
+p2 <- ggplot(data=scal.dt[scal.dt$G == 4,], aes(x=TT, y=elapsed)) +
+  geom_line() +
+  geom_point() + 
+  facet_grid( ~ Glab) +
+  xlab("T") + ylab("Evaluation Time (seconds)")
+p <- arrangeGrob(p1, p2, nrow=1, ncol=2) 
+ggsave(filename = "plots/mc_full_time_T.pdf", plot = p, scale = 0.75)
 
 ###################
 # Plot Scalability in G
