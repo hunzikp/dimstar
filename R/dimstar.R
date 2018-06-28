@@ -374,7 +374,7 @@ DISTAR <- R6Class("DISTAR",
                       constraint_vec <- rep(NA, self$G)
                       for (k in 1:self$G) {
                         lambda_k <- sum(par$lambda_vec[self$lambda_map.ls[[k]]])
-                        constraint_vec[k] <- par$rho_vec[k] + par$gamma_vec[k] + lambda_k
+                        constraint_vec[k] <- par$rho_vec[k] + lambda_k # + par$gamma_vec[k] 
                       }
 
                       return(constraint_vec)
