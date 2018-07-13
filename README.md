@@ -18,7 +18,7 @@ require(devtools)
 devtools::install_github('hunzikp/dimstar')
 ```
 
-NOTE: This is a development version; documentation is pending. The package assumes that Python (2.7 / 3.6) and [scipy](https://www.scipy.org/) is installed on your machine.
+NOTE: This is a development version; documentation is pending. The package assumes that Python (2.7 / 3.6) and [scipy](https://www.scipy.org/) are installed on your machine.
 
 Usage
 -----
