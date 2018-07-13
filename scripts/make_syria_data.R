@@ -5,21 +5,24 @@ library(cshapes)
 library(raster)
 library(velox)
 
-TARGET <- 'Syrian Arab Republic'
+TARGET <- 'Syria'
+CODE <- 'ADM2_CODE'
 
 ####################################
 # Load GAUL
 ####################################
 
 admin.spdf <- readOGR('/home/hunzikp/Data/gaul/g2015_2014_2/', 'g2015_2014_2')
-units.spdf <- admin.spdf[admin.spdf$ADM0_NAME == TARGET,]
-
+units.spdf <- admin.spdf[grepl(TARGET, admin.spdf$ADM0_NAME),]
+units.spdf$gid <- units.spdf@data[,CODE]
+units.spdf <- units.spdf[,c("gid", "Shape_Area")]
 
 ####################################
 # Add 1990 population data
 ####################################
 
 pop.ras <- raster('/home/hunzikp/Data/grump/asia/asup90ag.bil')
+#pop.ras <- raster("/home/hunzikp/Data/grump/africa/afup90ag.bil")
 pop.vx <- velox(pop.ras)
 pop.vx$crop(units.spdf)
 pop.vec <- pop.vx$extract(sp = units.spdf, fun = function(x) sum(x, na.rm = TRUE), legacy = TRUE)
@@ -45,11 +48,13 @@ units.spdf$mountains <- pdata.mat[,4]
 # Make admin units cross sections
 ####################################
 
-units.spdf <- units.spdf[,c('ADM2_CODE', 'Shape_Area', 'pop', 'ttime', 'mountains')]
+units.spdf <- units.spdf[,c('gid', 'Shape_Area', 'pop', 'ttime', 'mountains')]
 units.df <- units.spdf@data
 
-startdates <- seq(as.Date("2017-01-01"), by = "month", length.out = 17)
-enddates <- seq(as.Date("2017-02-01"), by="months", length.out = 17)-1
+# startdates <- seq(as.Date("2008-07-01"), as.Date("2018-06-30"), by = "month")
+# enddates <- seq(as.Date("2008-08-01"), as.Date("2018-07-01"), by = "month")-1
+startdates <- seq(as.Date("2017-01-01"), as.Date("2018-06-23"), by = "week")
+enddates <- seq(as.Date("2017-01-01"), as.Date("2018-06-23"), by = "week")+6
 
 crosssection.ls <- rep(list(units.df), length(startdates))
 crosssection.ls <- lapply(1:length(startdates), function(i) {
@@ -62,14 +67,16 @@ crosssection.ls <- lapply(1:length(startdates), function(i) {
 # Add acled data
 ###################################
 
-acled17.df <- read.csv("/home/hunzikp/Data/acled/2018/MiddleEast_2017-2018_June26.csv", stringsAsFactors = FALSE, fileEncoding="latin1")
+acled17.df <- read.csv("/home/hunzikp/Data/acled/2018/MiddleEast_2016-2018_upd-Jul3.csv", stringsAsFactors = FALSE, fileEncoding="latin1")
+#acled17.df <- read.csv("/home/hunzikp/Data/acled/2018/Africa_1997-2018_upd-Jul2.csv", stringsAsFactors = FALSE, fileEncoding="latin1")
 keep <- c("ISO", "EVENT_ID_CNTY", "EVENT_DATE", "YEAR", "TIME_PRECISION",
           "EVENT_TYPE", "ACTOR1", "ACTOR2",
           "INTERACTION",
           "COUNTRY", "LOCATION", "LATITUDE",
-          "LONGITUDE","FATALITIES")
+          "LONGITUDE","FATALITIES", "NOTES")
 acled17.df <- acled17.df[,keep]
 acled.df <- acled17.df
+acled.df <- acled.df[acled.df$COUNTRY == TARGET,]
 
 ## Correct dates
 acled.df$EVENT_DATE <- as.Date(acled.df$EVENT_DATE, "%d-%B-%Y")
@@ -78,17 +85,29 @@ names(acled.df) <- tolower(names(acled.df))
 ## Add event type markers
 acled.df$battle_event <- grepl(acled.df$event_type, pattern = 'attle')
 acled.df$protest_event <- grepl(acled.df$event_type, pattern = 'rotest')
-acled.df$civilian_event <- grepl(acled.df$event_type, pattern = 'ivilian')
+acled.df$civilian_event <- grepl(acled.df$event_type, pattern = 'ivilian') | grepl(acled.df$actor2, pattern = 'ivilian')
+
+## Add special event markers
+acled.df$strike_event <- grepl(acled.df$notes, pattern = "strike")
+acled.df$isis_event <- grepl(acled.df$actor1, pattern = "slamic State") | grepl(acled.df$actor2, pattern = "slamic State")
+acled.df$isis_battle <- acled.df$isis_event*acled.df$battle_event
+acled.df$isis_civilian <- acled.df$isis_event*acled.df$civilian_event
+acled.df$isis_strike <- acled.df$isis_event*acled.df$strike_event
+
+## Get rid of notes
+acled.df <- acled.df[,-which(names(acled.df) == "notes")]
 
 ## Make spatial points
 acled.spdf <- SpatialPointsDataFrame(coords = acled.df[,c('longitude', 'latitude')], data = acled.df)
 
 ## Add acled data to priogrid cross-sections
-variables <- c('battle_event', 'protest_event', 'civilian_event')
-for (t in 1:length(YEARS)) {
-  year <- YEARS[t]
+variables <- c('battle_event', 'protest_event', 'civilian_event', "strike_event", "isis_event", "isis_battle", "isis_civilian", "isis_strike")
+periods <- 1:length(crosssection.ls)
+for (t in 1:length(periods)) {
+  startdate <- crosssection.ls[[t]]$startdate[1]
+  enddate <- crosssection.ls[[t]]$enddate[1]
   thisgid.df <- crosssection.ls[[t]]
-  this.acled.spdf <- acled.spdf[acled.spdf$year == year,]
+  this.acled.spdf <- acled.spdf[acled.spdf$event_date >= startdate & acled.spdf$event_date <= enddate,]
   
   for (j in 1:length(variables)) {
     variable <- variables[j]
@@ -117,4 +136,7 @@ panel.df <- do.call(rbind, crosssection.ls)
 ###################################
 
 data.ls <- list(spdf = units.spdf, panel = panel.df)
-saveRDS(data.ls, file = 'data/admin_acled.rds')
+saveRDS(data.ls, file = 'data/syria_acled.rds')
+
+
+
