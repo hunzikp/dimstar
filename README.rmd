@@ -2,7 +2,7 @@
 title: "dimstar: Discrete Multivariate Spatio-temporal Autoregressive Models"
 author: "Philipp Hunziker"
 date: "July 13, 2017"
-output: md_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
