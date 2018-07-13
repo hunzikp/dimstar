@@ -136,7 +136,7 @@ panel.df <- do.call(rbind, crosssection.ls)
 ###################################
 
 data.ls <- list(spdf = units.spdf, panel = panel.df)
-saveRDS(data.ls, file = 'data/syria_acled.rds')
+saveRDS(data.ls, file = 'extdata/syria_acled.rds')
 
 
 

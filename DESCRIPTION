@@ -2,7 +2,7 @@ Package: dimstar
 Type: Package
 Title: Discrete Multivariate Spatio-temporal Autoregressive Models
 Version: 1.0
-Date: 2018-06-20
+Date: 2018-07-13
 Author: Philipp Hunziker
 Maintainer: Philipp Hunziker <hunzikp@gmail.com>
 Description: MCEM algorithms for discrete multivariate spatio-temporal autoregressive models
@@ -22,3 +22,4 @@ Imports: Rcpp (>= 0.12.16),
          numDeriv,
          mvtnorm
 LinkingTo: Rcpp, RcppArmadillo
+LazyData: true

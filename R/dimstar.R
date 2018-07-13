@@ -400,7 +400,7 @@ DISTAR <- R6Class("DISTAR",
                       self$lambda_vec <- par$lambda_vec
                     },
 
-                    train = function(maxiter = 20, M = 50, abs_tol = 1e-3, soft_init = TRUE, burnin = 50, thinning = 1) {
+                    train = function(maxiter = 20, M = 50, abs_tol = 1e-3, soft_init = TRUE, burnin = 50, thinning = 1, verbose = FALSE) {
                       # Learn the parameters
 
                       iter <- 0
@@ -445,8 +445,11 @@ DISTAR <- R6Class("DISTAR",
                         max_change <- max(abs(self$pack_theta() - theta_old))
                         change_vec <- c(change_vec, max_change)
                         iter <- iter + 1
-                        print(paste("Iteration", iter))
-                        flush.console()
+                        
+                        if (verbose) {
+                          print(paste0("Iteration ", iter, "; Max. parameter change = ", round(max_change, 3)))
+                          flush.console()
+                        }
                       }
                       return(change_vec)
                     },
@@ -488,7 +491,7 @@ DISTAR <- R6Class("DISTAR",
                       return(gr)
                     },
 
-                    compute_vcov = function(M, thinning = 2) {
+                    compute_vcov = function(M, thinning = 2, verbose = FALSE) {
                       ## See Louis (1982): "Finding the observed information matrix when using the EM algorithm"
 
                       self$sample_ystar(M*thinning, ystar_init = colMeans(self$ystar_sample))
@@ -506,9 +509,11 @@ DISTAR <- R6Class("DISTAR",
 
                         grad.mat[i,] <- gr
                         hess.ls[[i]] <- hs
-
-                        print(i)
-                        flush.console()
+                        
+                        if (verbose) {
+                          print(i)
+                          flush.console()
+                        }
                       }
 
                       # Get observed information matrix

@@ -19,7 +19,7 @@ library(data.table)
 ###########################
 
 ## Load the data
-prio.ls <- readRDS('data/syria_acled.rds')
+prio.ls <- readRDS('extdata/syria_acled.rds')
 
 ## Get data
 panel.df <- prio.ls$panel
