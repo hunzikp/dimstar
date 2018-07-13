@@ -3,9 +3,6 @@ dimstar: Discrete Multivariate Spatio-temporal Autoregressive Models
 Philipp Hunziker
 July 13, 2017
 
-dimstar: Discrete Multivariate Spatio-temporal Autoregressive Models
-====================================================================
-
 `dimstar` is an R package implementing a novel MCEM algorithm for estimating latent-Guassian spatio-temporal autoregressive models for potentially multivariate binary and count outcomes.
 
 Installation
