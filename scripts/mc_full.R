@@ -129,6 +129,16 @@ results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x)))
 results.df <- cbind(config.df, results.df)
 saveRDS(results.df, file = 'results/mc_full_rmse_count.rds')
 
+###################
+# Print average run-times
+###################
+
+runtime.df <- results.df
+runtime.df$dim <- unlist(lapply(runtime.df$data_dim, function(x) paste(paste0(c("N = ", "T = ", "G = "), x), collapse = ", ")))
+runtime.dt <- data.table(runtime.df)
+runtime.dt <- runtime.dt[,list(runtime = mean(elapsed)), by = list(dim)]
+print(runtime.dt$runtime)
+print(runtime.dt$runtime/60)
 
 ###################
 # Plot bias / RMSE

@@ -96,7 +96,7 @@ DISTAR <- R6Class("DISTAR",
                       self$TM.ls <- make_temporal_weights(N, G, TT)
 
                       ## Make O.ls: One NGTxNGT matrix per outcome-pair
-                      # NOTE: If G = 1, returns a single NxT matrix of zeros
+                      # NOTE: If G = 1, returns a single NTxNT matrix of zeros
                       self$O.ls <- make_outcome_weights(N, G, TT)
                       self$n_pairs <- length(self$O.ls) # set to 1 if G = 1
 
