@@ -8,24 +8,24 @@ reticulate::use_condaenv("py36")
 #########################
 # Set parameters
 
-N <- 20*20
-TT <- 1
+N <- 256
+TT <- 20
 G <- 1
 n_pairs <- ifelse(G > 1, ncol(combn(G, 2)), 1)
 
-temporal_dep <- FALSE
+temporal_dep <- TRUE
 spatial_dep <- TRUE
 outcome_dep <- FALSE
 count <- FALSE
 
-rho <- ifelse(spatial_dep, 0.25, 0)
-gamma <- ifelse(temporal_dep, 0.25, 0)
+rho <- ifelse(spatial_dep, 0.45, 0)
+gamma <- ifelse(temporal_dep, 0.45, 0)
 lambda <- ifelse(outcome_dep, 0.25, 0)
 
 if (count) {
   beta <- c(3,1)
 } else {
-  beta <- c(-0.5,1)
+  beta <- c(-0.5, 1)
 }
 sigma2 <- 1
 
@@ -80,7 +80,7 @@ system.time(model$E_llik(theta))
 #########################
 # Train test
 
-chng_vec <- model$train(maxiter = 20, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1)
+chng_vec <- model$train(maxiter = 50, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1, soft_init = FALSE, verbose = TRUE)
 plot(chng_vec)
 model$beta.ls
 model$sigma2_vec
@@ -90,9 +90,17 @@ model$rho_vec
 
 #########################
 # VCOV test
-model$compute_vcov(M = 100, thinning = 4)
+model$compute_vcov(M = 1000, thinning = 10, verbose = TRUE)
 model$coeftest()
-model$coeftest(print_out = F)
+
+estim <- model$coeftest(print_out = F)
+theta_est <- estim$coef
+se <- estim$se
+se
+# 0.05516480 0.03882166 0.02401263 0.02210312
+
+theta_lo <- theta_est - qnorm(0.95)*se
+theta_hi <- theta_est +  qnorm(0.95)*se
 
 
 ### TODO

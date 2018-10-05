@@ -4,6 +4,7 @@
 ########################################################################
 
 library(dimstar)
+library(reticulate)
 library(foreach)
 library(doMC)
 registerDoMC(10)
@@ -47,8 +48,8 @@ fit_dimstar <- function(data) {
   timing <- system.time({
     res <- try({
       set.seed(0)
-      model$train(maxiter = 10, M = 50, abs_tol = 1e-4, burnin = 0, thinning = 1, verbose = FALSE)
-      model$compute_vcov(M = 100, thinning = 1)
+      model$train(maxiter = 200, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1, verbose = TRUE, soft_init = FALSE)
+      model$compute_vcov(M = 500, thinning = 5)
     }, silent = TRUE)
   })
   
@@ -68,11 +69,11 @@ fit_dimstar <- function(data) {
     theta_hi <- theta_est +  qnorm(0.95)*se
     
     results <- as.list(c(theta_est, theta_lo, theta_hi))
+    
+    nms <- names(theta_est)
+    nms <- c(paste0(nms, '_est'), paste0(nms, '_lo'), paste0(nms, '_hi'))
+    names(results) <- nms
   }
-  
-  nms <- names(theta_est)
-  nms <- c(paste0(nms, '_est'), paste0(nms, '_lo'), paste0(nms, '_hi'))
-  names(results) <- nms
   
   results$elapsed <- timing[3]
   
@@ -96,22 +97,14 @@ config.df <- expand.grid(data_dim = list(list(N = 64, TT = 10, G = 1), list(N = 
                          dep_params = list(list(rho_vec = 0, gamma_vec = 0),
                                            list(rho_vec = 0.25, gamma_vec = 0.25),
                                            list(rho_vec = 0.45, gamma_vec = 0.45)),
-                         beta0 = c(2),
+                         beta0 = c(1),
                          beta1 = c(1),
                          count = TRUE,
                          seed = 1:M,
                          model = c("dimstar"),
                          stringsAsFactors = FALSE)
 config.ls <- split(config.df, seq(nrow(config.df)))
-# config.df <- expand.grid(data_dim = list(list(N = 64, TT = 10, G = 1)),
-#                          dep_params = list(list(rho_vec = 0.25, gamma_vec = 0.25)),
-#                          beta0 = c(2),
-#                          beta1 = c(1),
-#                          count = TRUE,
-#                          seed = 1:M,
-#                          model = c("dimstar"),
-#                          stringsAsFactors = FALSE)
-# config.ls <- split(config.df, seq(nrow(config.df)))
+
 
 ###################
 # Main MC Loop
@@ -130,6 +123,7 @@ results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) 
   ## Return result
   results
 }
+
 
 ###################
 # Concatenate & save results
@@ -161,7 +155,8 @@ library(data.table)
 ## Calculate bias
 dimvec <- unlist(lapply(results.df$data_dim, function(x) paste(paste0(c("N = ", "T = "), x[-3]), collapse = ", ")))
 depvec <- unlist(lapply(results.df$dep_params, function(x) paste(paste0(c("rho = ", "gamma = "), x), collapse = ", ")))
-bias.df <- data.frame(dim = dimvec, dep = depvec)
+depnum <- unlist(lapply(results.df$dep_params, function(x) x[1]))
+bias.df <- data.frame(dim = dimvec, dep = depvec, depnum = depnum)
 bias.df$beta0 <- bias.df$beta1 <- bias.df$rho <- bias.df$gamma <- NA
 for (i in 1:nrow(results.df)) {
   bias.df$beta0[i] <- results.df$beta_1_0_est[i] - results.df$beta0[i]
@@ -172,34 +167,48 @@ for (i in 1:nrow(results.df)) {
 
 ## Wide to long
 library(reshape2)
-bias.df <- melt(bias.df, id.vars = list('dim', "dep"))
+bias.df <- melt(bias.df, id.vars = list('dim', "dep", "depnum"))
 
 ## Prepare faceting
 bias.df$dd <- 1
 bias.df$dim_f = factor(bias.df$dim, levels=unique(bias.df$dim)[order(unique(bias.df$dim), decreasing = T)])
-bias.df$dep_f = factor(bias.df$dep, levels=unique(bias.df$dep)[order(unique(bias.df$dep), decreasing = T)])
+bias.df$dep_f = factor(bias.df$dep, levels=unique(bias.df$dep)[order(unique(bias.df$depnum), decreasing = F)])
+bias.df$variable = factor(bias.df$variable, levels=unique(bias.df$variable)[order(unique(as.character(bias.df$variable)), decreasing = F)])
 
 ## Prepare aggregates
 agg.dt <- data.table(bias.df)
 rmse <- function(x) {sqrt(mean(x^2, na.rm=TRUE))}
 agg.df <- data.frame(agg.dt[, j=list(bias = mean(value, na.rm = TRUE), rm = rmse(value)),by = list(dim_f, dep_f, variable, dd)])
 
-## Determine y limits
-ylim <- c(min(bias.df$value) - 0.2, max(bias.df$value) + 0.2)
-
-## Plot errors, bottom row - bias, top row - rmse
-p <- ggplot(bias.df, aes(x=dd, y=value)) +  geom_violin()
-p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
-p <- p + facet_grid(dim_f + dep_f ~ variable) + xlab("") + ylab("Error") 
-p <- p + theme(axis.title.x=element_blank(),
-           axis.text.x=element_blank(),
-           axis.ticks.x=element_blank())
-p <- p + ylim(ylim[1], ylim[2])
-p <- p + geom_text(data=agg.df, aes(x = dd, y = ylim[1] + 0.1, 
-                                    label=sprintf("%0.2f", round(bias, digits = 3))), size=4)
-p <- p + geom_text(data=agg.df, aes(x = dd, y = ylim[2] - 0.1, 
-                                    label=sprintf("%0.2f", round(rm, digits = 3))), size=4)
-ggsave(filename = "plots/mc_full_bias_count.pdf", plot = p)
+### Create separate plots for separate sample sizes
+counter <- 1
+for (dim in unique(bias.df$dim_f)) {
+  
+  plot.df <- bias.df[bias.df$dim_f == dim,]
+  
+  ## Determine y limits
+  ylim <- c(min(plot.df$value) - 0.2, max(plot.df$value) + 0.2)
+  
+  ## Plot errors, bottom row - bias, top row - rmse
+  p <- ggplot(plot.df, aes(x=dd, y=value)) +  geom_violin()
+  p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
+  p <- p + facet_grid(dep_f ~ variable) + xlab("") + ylab("Error")
+  p <- p + theme(axis.title.x=element_blank(),
+                 axis.text.x=element_blank(),
+                 axis.ticks.x=element_blank(),
+                 plot.title = element_text(face = "bold"))
+  p <- p + ylim(ylim[1], ylim[2])
+  p <- p + ggtitle(as.character(dim))
+  p <- p + geom_text(data=agg.df[agg.df$dim_f == dim,], aes(x = dd, y = ylim[1] + 0.1, 
+                                      label=sprintf("%0.2f", round(bias, digits = 3))), size=4)
+  p <- p + geom_text(data=agg.df[agg.df$dim_f == dim,], aes(x = dd, y = ylim[2] - 0.1, 
+                                      label=sprintf("%0.2f", round(rm, digits = 3))), size=4)
+  
+  filename <- paste0("plots/mc_bias_count_", counter, ".pdf")
+  ggsave(filename = filename, plot = p)
+  
+  counter <- counter + 1
+}
 
 
 ###################
@@ -209,21 +218,21 @@ library(data.table)
 
 ## Coverage data frame
 coverage.df <- results.df
-coverage.df$dim <- unlist(lapply(coverage.df$data_dim, function(x) paste(paste0(c("N = ", "T = ", "G = "), x), collapse = ", ")))
-coverage.df$beta0_1_hit <- 2 < coverage.df$beta_1_0_hi & 2 > coverage.df$beta_1_0_lo
-coverage.df$beta0_2_hit <- 2 < coverage.df$beta_2_0_hi & 2 > coverage.df$beta_2_0_lo
-coverage.df$beta1_1_hit <- 1 < coverage.df$beta_1_1_hi & 1 > coverage.df$beta_1_1_lo
-coverage.df$beta1_2_hit <- 1 < coverage.df$beta_2_1_hi & 1 > coverage.df$beta_2_1_lo
-coverage.df$lambda_hit <- 0.25 < coverage.df$lambda1_hi & 0.25 > coverage.df$lambda1_lo
-coverage.df$rho_1_hit <- 0.25 < coverage.df$rho_1_hi & 0.25 > coverage.df$rho_1_lo
-coverage.df$rho_2_hit <- 0.25 < coverage.df$rho_2_hi & 0.25 > coverage.df$rho_2_lo
-coverage.df$gamma_1_hit <- 0.25 < coverage.df$gamma_1_hi & 0.25 > coverage.df$gamma_1_lo
-coverage.df$gamma_2_hit <- 0.25 < coverage.df$gamma_2_hi & 0.25 > coverage.df$gamma_2_lo
+coverage.df$dim <- unlist(lapply(coverage.df$data_dim, function(x) paste(paste0(c("N = ", "T = "), x[-3]), collapse = ", ")))
+coverage.df$dep <- unlist(lapply(results.df$dep_params, function(x) paste(paste0(c("rho = ", "gamma = "), x), collapse = ", ")))
+coverage.df$depnum <- unlist(lapply(results.df$dep_params, function(x) x[1]))
+coverage.df$rho <- unlist(lapply(coverage.df$dep_params, function(x) x[1]))
+coverage.df$gamma <- unlist(lapply(coverage.df$dep_params, function(x) x[2]))
+
+coverage.df$beta0_hit <- coverage.df$beta0 < coverage.df$beta_1_0_hi & coverage.df$beta0 > coverage.df$beta_1_0_lo
+coverage.df$beta1_hit <- coverage.df$beta1 < coverage.df$beta_1_1_hi & coverage.df$beta1 > coverage.df$beta_1_1_lo
+coverage.df$gamma_hit <- coverage.df$gamma < coverage.df$gamma_1_hi & coverage.df$gamma > coverage.df$gamma_1_lo
+coverage.df$rho_hit <- coverage.df$rho < coverage.df$rho_1_hi & coverage.df$rho > coverage.df$rho_1_lo
 coverage_var_names <- names(coverage.df)[grep("hit", names(coverage.df))]
-coverage.df <- coverage.df[,c("dim", coverage_var_names)]
+coverage.df <- coverage.df[,c("dim", "dep", "depnum", coverage_var_names)]
 
 ## Wide to long
-coverage.df <- melt(coverage.df, id.vars = 'dim')
+coverage.df <- melt(coverage.df, id.vars = c('dim', "dep", "depnum"))
 cov.dt <- data.table(coverage.df)
 
 ## Renampe
@@ -232,23 +241,36 @@ cov.dt$variable <- gsub(pattern = "_hit", replacement = "", cov.dt$variable)
 ## Aggregate
 pt_lo <- function(x) {prop.test(x = sum(x), n = length(x))$conf.int[1]}
 pt_hi <- function(x) {prop.test(x = sum(x), n = length(x))$conf.int[2]}
-cov.dt <- cov.dt[, .(hit_mean = mean(value), hit_hi = pt_hi(value), hit_lo = pt_lo(value)), by = .(dim, variable)]
+cov.dt <- cov.dt[, .(hit_mean = mean(value), hit_hi = pt_hi(value), hit_lo = pt_lo(value)), by = .(dim, dep, depnum, variable)]
 
 ## Prepare faceting
 cov.dt$dd <- 1
 cov.dt$dim_f = factor(cov.dt$dim, levels=unique(cov.dt$dim)[order(unique(cov.dt$dim), decreasing = T)])
+cov.dt$dep_f = factor(cov.dt$dep, levels=unique(cov.dt$dep)[order(unique(cov.dt$depnum), decreasing = F)])
 
-## Bar plot
-p <- ggplot(data=cov.dt, aes(x=dd))
-p <- p + geom_bar(aes(weight = hit_mean))
-p <- p + geom_errorbar(aes(ymin=hit_lo, ymax=hit_hi), width = 0.2)
-p <- p + facet_grid(dim_f ~ variable) + geom_hline(yintercept = 0.9, linetype = 2, size = 0.25)
-p <- p + theme(axis.title.x=element_blank(),
-              axis.text.x=element_blank(),
-              axis.ticks.x=element_blank())
-p <- p + ylab("Coverage")
-ggsave(filename = "plots/mc_full_coverage_count.pdf", plot = p)
-
+## Bar plot for each sample size
+cov.df <- as.data.frame(cov.dt)
+counter <- 1
+for (dim in unique(cov.df$dim_f)) {
+  
+  plot.df <- cov.df[cov.df$dim_f == dim,]
+  
+  p <- ggplot(data=plot.df, aes(x=dd))
+  p <- p + geom_bar(aes(weight = hit_mean))
+  p <- p + geom_errorbar(aes(ymin=hit_lo, ymax=hit_hi), width = 0.2)
+  p <- p + facet_grid(dep_f ~ variable) + geom_hline(yintercept = 0.9, linetype = 2, size = 0.25)
+  p <- p + theme(axis.title.x=element_blank(),
+                 axis.text.x=element_blank(),
+                 axis.ticks.x=element_blank(),
+                 plot.title = element_text(face = "bold"))
+  p <- p + ggtitle(as.character(dim))
+  p <- p + ylab("Coverage")
+  
+  filename <- paste0("plots/mc_coverage_count_", counter, ".pdf")
+  ggsave(filename = filename, plot = p)
+  
+  counter <- counter + 1
+}
 
 
 #################################################
@@ -256,16 +278,20 @@ ggsave(filename = "plots/mc_full_coverage_count.pdf", plot = p)
 # Note: Needs M = 300 for SE estimation
 #################################################
 
+# BAUSTELLE
+# PROBLEM: STANDARD ERRORS TOO NARROW IF RHO/GAMMA = 0.45
+# POSSIBLE EXPLANATION: maxiter NOT HIGH ENOUG DURING ESTIMATION
+
 ###################
 # Set up configurations
 ###################
 
 ## Constants
-M <- 30
+M <- 50
 
 ## Configs
-config.df <- expand.grid(data_dim = list(list(N = 36, TT = 10, G = 2), list(N = 256, TT = 10, G = 2)),
-                         dep_params = list(list(rho_vec = c(0.25,0.25), gamma_vec = c(0.25,0.25), lambda_vec = 0.25)),
+config.df <- expand.grid(data_dim = list(list(N = 36, TT = 10, G = 1)),
+                         dep_params = list(list(rho_vec = 0.45, gamma_vec = 0.45)),
                          beta0 = c(-0.5),
                          beta1 = c(1),
                          count = FALSE,
@@ -293,14 +319,26 @@ results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) 
   results
 }
 
+
 ###################
 # Concatenate & save results
 ###################
 
 results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x)))
 results.df <- cbind(config.df, results.df)
-saveRDS(results.df, file = 'results/mc_full_rmse_binary.rds')
+saveRDS(results.df, file = 'results/mc_spatiotemporal_rmse_binary.rds')
 
+
+###################
+# Print average run-times
+###################
+
+runtime.df <- results.df
+runtime.df$dim <- unlist(lapply(runtime.df$data_dim, function(x) paste(paste0(c("N = ", "T = ", "G = "), x), collapse = ", ")))
+runtime.dt <- data.table(runtime.df)
+runtime.dt <- runtime.dt[,list(runtime = mean(elapsed)), by = list(dim)]
+print(runtime.dt$runtime)
+print(runtime.dt$runtime/60)
 
 ###################
 # Plot bias / RMSE
@@ -310,51 +348,62 @@ library(ggplot2)
 library(data.table)
 
 ## Calculate bias
-bias.df <- results.df
-bias.df$dim <- unlist(lapply(bias.df$data_dim, function(x) paste(paste0(c("N = ", "T = ", "G = "), x), collapse = ", ")))
-est_param_names <- names(bias.df)[grep("est", names(bias.df))]
-bias.df <- bias.df[,c("dim", est_param_names)]
-bias.df$beta0_1 <- bias.df$beta_1_0_est - -0.5
-bias.df$beta0_2 <- bias.df$beta_2_0_est - -0.5
-bias.df$beta1_1 <- bias.df$beta_1_1_est - 1
-bias.df$beta1_2 <- bias.df$beta_2_1_est - 1
-bias.df$lambda <- bias.df$lambda1_est - 0.25
-bias.df$rho_1 <- bias.df$rho_1_est - 0.25
-bias.df$rho_2 <- bias.df$rho_2_est - 0.25
-bias.df$gamma_1 <- bias.df$gamma_1_est - 0.25
-bias.df$gamma_2 <- bias.df$gamma_2_est - 0.25
-bias.df <- bias.df[,c("dim", "beta0_1", "beta0_2", "beta1_1", "beta1_2", 
-                      "lambda", "rho_1", "rho_2", "gamma_1", "gamma_2")]
+dimvec <- unlist(lapply(results.df$data_dim, function(x) paste(paste0(c("N = ", "T = "), x[-3]), collapse = ", ")))
+depvec <- unlist(lapply(results.df$dep_params, function(x) paste(paste0(c("rho = ", "gamma = "), x), collapse = ", ")))
+depnum <- unlist(lapply(results.df$dep_params, function(x) x[1]))
+bias.df <- data.frame(dim = dimvec, dep = depvec, depnum = depnum)
+bias.df$beta0 <- bias.df$beta1 <- bias.df$rho <- bias.df$gamma <- NA
+for (i in 1:nrow(results.df)) {
+  bias.df$beta0[i] <- results.df$beta_1_0_est[i] - results.df$beta0[i]
+  bias.df$beta1[i] <- results.df$beta_1_1_est[i] - results.df$beta1[i]
+  bias.df$gamma[i] <- results.df$gamma_1_est[i] - results.df$dep_params[[i]]$gamma_vec
+  bias.df$rho[i] <- results.df$rho_1_est[i] - results.df$dep_params[[i]]$rho_vec
+}
 
 ## Wide to long
 library(reshape2)
-bias.df <- melt(bias.df, id.vars = 'dim')
+bias.df <- melt(bias.df, id.vars = list('dim', "dep", "depnum"))
 
 ## Prepare faceting
 bias.df$dd <- 1
 bias.df$dim_f = factor(bias.df$dim, levels=unique(bias.df$dim)[order(unique(bias.df$dim), decreasing = T)])
+bias.df$dep_f = factor(bias.df$dep, levels=unique(bias.df$dep)[order(unique(bias.df$depnum), decreasing = F)])
+bias.df$variable = factor(bias.df$variable, levels=unique(bias.df$variable)[order(unique(as.character(bias.df$variable)), decreasing = F)])
 
 ## Prepare aggregates
 agg.dt <- data.table(bias.df)
 rmse <- function(x) {sqrt(mean(x^2, na.rm=TRUE))}
-agg.df <- data.frame(agg.dt[, j=list(bias = mean(value, na.rm = TRUE), rm = rmse(value)),by = list(dim_f, variable, dd)])
+agg.df <- data.frame(agg.dt[, j=list(bias = mean(value, na.rm = TRUE), rm = rmse(value)),by = list(dim_f, dep_f, variable, dd)])
 
-## Determine y limits
-ylim <- c(min(bias.df$value) - 0.2, max(bias.df$value) + 0.2)
-
-## Plot errors, bottom row - bias, top row - rmse
-p <- ggplot(bias.df, aes(x=dd, y=value)) +  geom_violin()
-p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
-p <- p + facet_grid(dim_f ~ variable) + xlab("") + ylab("Error") 
-p <- p + theme(axis.title.x=element_blank(),
-               axis.text.x=element_blank(),
-               axis.ticks.x=element_blank())
-p <- p + ylim(ylim[1], ylim[2])
-p <- p + geom_text(data=agg.df, aes(x = dd, y = ylim[1] + 0.1, 
-                                    label=sprintf("%0.2f", round(bias, digits = 3))), size=4)
-p <- p + geom_text(data=agg.df, aes(x = dd, y = ylim[2] - 0.1, 
-                                    label=sprintf("%0.2f", round(rm, digits = 3))), size=4)
-ggsave(filename = "plots/mc_full_bias_binary.pdf", plot = p)
+### Create separate plots for separate sample sizes
+counter <- 1
+for (dim in unique(bias.df$dim_f)) {
+  
+  plot.df <- bias.df[bias.df$dim_f == dim,]
+  
+  ## Determine y limits
+  ylim <- c(min(plot.df$value) - 0.2, max(plot.df$value) + 0.2)
+  
+  ## Plot errors, bottom row - bias, top row - rmse
+  p <- ggplot(plot.df, aes(x=dd, y=value)) +  geom_violin()
+  p <- p + geom_hline(yintercept = 0) + stat_summary(fun.y=mean, geom="point", shape=23, size=2)
+  p <- p + facet_grid(dep_f ~ variable) + xlab("") + ylab("Error")
+  p <- p + theme(axis.title.x=element_blank(),
+                 axis.text.x=element_blank(),
+                 axis.ticks.x=element_blank(),
+                 plot.title = element_text(face = "bold"))
+  p <- p + ylim(ylim[1], ylim[2])
+  p <- p + ggtitle(as.character(dim))
+  p <- p + geom_text(data=agg.df[agg.df$dim_f == dim,], aes(x = dd, y = ylim[1] + 0.1, 
+                                                            label=sprintf("%0.2f", round(bias, digits = 3))), size=4)
+  p <- p + geom_text(data=agg.df[agg.df$dim_f == dim,], aes(x = dd, y = ylim[2] - 0.1, 
+                                                            label=sprintf("%0.2f", round(rm, digits = 3))), size=4)
+  
+  filename <- paste0("plots/mc_bias_binary_", counter, ".pdf")
+  ggsave(filename = filename, plot = p)
+  
+  counter <- counter + 1
+}
 
 
 ###################
@@ -364,21 +413,21 @@ library(data.table)
 
 ## Coverage data frame
 coverage.df <- results.df
-coverage.df$dim <- unlist(lapply(coverage.df$data_dim, function(x) paste(paste0(c("N = ", "T = ", "G = "), x), collapse = ", ")))
-coverage.df$beta0_1_hit <- -0.5 < coverage.df$beta_1_0_hi & -0.5 > coverage.df$beta_1_0_lo
-coverage.df$beta0_2_hit <- -0.5 < coverage.df$beta_2_0_hi & -0.5 > coverage.df$beta_2_0_lo
-coverage.df$beta1_1_hit <- 1 < coverage.df$beta_1_1_hi & 1 > coverage.df$beta_1_1_lo
-coverage.df$beta1_2_hit <- 1 < coverage.df$beta_2_1_hi & 1 > coverage.df$beta_2_1_lo
-coverage.df$lambda_hit <- 0.25 < coverage.df$lambda1_hi & 0.25 > coverage.df$lambda1_lo
-coverage.df$rho_1_hit <- 0.25 < coverage.df$rho_1_hi & 0.25 > coverage.df$rho_1_lo
-coverage.df$rho_2_hit <- 0.25 < coverage.df$rho_2_hi & 0.25 > coverage.df$rho_2_lo
-coverage.df$gamma_1_hit <- 0.25 < coverage.df$gamma_1_hi & 0.25 > coverage.df$gamma_1_lo
-coverage.df$gamma_2_hit <- 0.25 < coverage.df$gamma_2_hi & 0.25 > coverage.df$gamma_2_lo
+coverage.df$dim <- unlist(lapply(coverage.df$data_dim, function(x) paste(paste0(c("N = ", "T = "), x[-3]), collapse = ", ")))
+coverage.df$dep <- unlist(lapply(results.df$dep_params, function(x) paste(paste0(c("rho = ", "gamma = "), x), collapse = ", ")))
+coverage.df$depnum <- unlist(lapply(results.df$dep_params, function(x) x[1]))
+coverage.df$rho <- unlist(lapply(coverage.df$dep_params, function(x) x[1]))
+coverage.df$gamma <- unlist(lapply(coverage.df$dep_params, function(x) x[2]))
+
+coverage.df$beta0_hit <- coverage.df$beta0 < coverage.df$beta_1_0_hi & coverage.df$beta0 > coverage.df$beta_1_0_lo
+coverage.df$beta1_hit <- coverage.df$beta1 < coverage.df$beta_1_1_hi & coverage.df$beta1 > coverage.df$beta_1_1_lo
+coverage.df$gamma_hit <- coverage.df$gamma < coverage.df$gamma_1_hi & coverage.df$gamma > coverage.df$gamma_1_lo
+coverage.df$rho_hit <- coverage.df$rho < coverage.df$rho_1_hi & coverage.df$rho > coverage.df$rho_1_lo
 coverage_var_names <- names(coverage.df)[grep("hit", names(coverage.df))]
-coverage.df <- coverage.df[,c("dim", coverage_var_names)]
+coverage.df <- coverage.df[,c("dim", "dep", "depnum", coverage_var_names)]
 
 ## Wide to long
-coverage.df <- melt(coverage.df, id.vars = 'dim')
+coverage.df <- melt(coverage.df, id.vars = c('dim', "dep", "depnum"))
 cov.dt <- data.table(coverage.df)
 
 ## Renampe
@@ -387,22 +436,37 @@ cov.dt$variable <- gsub(pattern = "_hit", replacement = "", cov.dt$variable)
 ## Aggregate
 pt_lo <- function(x) {prop.test(x = sum(x), n = length(x))$conf.int[1]}
 pt_hi <- function(x) {prop.test(x = sum(x), n = length(x))$conf.int[2]}
-cov.dt <- cov.dt[, .(hit_mean = mean(value), hit_hi = pt_hi(value), hit_lo = pt_lo(value)), by = .(dim, variable)]
+cov.dt <- cov.dt[, .(hit_mean = mean(value), hit_hi = pt_hi(value), hit_lo = pt_lo(value)), by = .(dim, dep, depnum, variable)]
 
 ## Prepare faceting
 cov.dt$dd <- 1
 cov.dt$dim_f = factor(cov.dt$dim, levels=unique(cov.dt$dim)[order(unique(cov.dt$dim), decreasing = T)])
+cov.dt$dep_f = factor(cov.dt$dep, levels=unique(cov.dt$dep)[order(unique(cov.dt$depnum), decreasing = F)])
 
-## Bar plot
-p <- ggplot(data=cov.dt, aes(x=dd))
-p <- p + geom_bar(aes(weight = hit_mean))
-p <- p + geom_errorbar(aes(ymin=hit_lo, ymax=hit_hi), width = 0.2)
-p <- p + facet_grid(dim_f ~ variable) + geom_hline(yintercept = 0.9, linetype = 2, size = 0.25)
-p <- p + theme(axis.title.x=element_blank(),
-               axis.text.x=element_blank(),
-               axis.ticks.x=element_blank())
-p <- p + ylab("Coverage")
-ggsave(filename = "plots/mc_full_coverage_binary.pdf", plot = p)
+## Bar plot for each sample size
+cov.df <- as.data.frame(cov.dt)
+counter <- 1
+for (dim in unique(cov.df$dim_f)) {
+  
+  plot.df <- cov.df[cov.df$dim_f == dim,]
+  
+  p <- ggplot(data=plot.df, aes(x=dd))
+  p <- p + geom_bar(aes(weight = hit_mean))
+  p <- p + geom_errorbar(aes(ymin=hit_lo, ymax=hit_hi), width = 0.2)
+  p <- p + facet_grid(dep_f ~ variable) + geom_hline(yintercept = 0.9, linetype = 2, size = 0.25)
+  p <- p + theme(axis.title.x=element_blank(),
+                 axis.text.x=element_blank(),
+                 axis.ticks.x=element_blank(),
+                 plot.title = element_text(face = "bold"))
+  p <- p + ggtitle(as.character(dim))
+  p <- p + ylab("Coverage")
+  
+  filename <- paste0("plots/mc_coverage_binary_", counter, ".pdf")
+  ggsave(filename = filename, plot = p)
+  
+  counter <- counter + 1
+}
+
 
 
 
