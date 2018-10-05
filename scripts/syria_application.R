@@ -407,7 +407,7 @@ model2_civ <- DISTAR$new(X.ls = X.ls, y.ls = y.ls, W_t = W_t,
 
 # Train
 set.seed(0)
-ch_vec <- model2_civ$train(maxiter = 15, M = 50, abs_tol = 1e-4, soft_init = FALSE)
+ch_vec <- model2_civ$train(maxiter = 15, M = 50, abs_tol = 1e-4, soft_init = FALSE, verbose = TRUE)
 plot(ch_vec)
 
 # Compute VCOV, print table
@@ -435,7 +435,8 @@ model3 <- DISTAR$new(X.ls = X.ls, y.ls = y.ls, W_t = W_t,
                      outcome_dep = TRUE)
 
 # Train
-ch_vec <- model3$train(maxiter = 15, M = 50, abs_tol = 1e-4, soft_init = TRUE)
+set.seed(0)
+ch_vec <- model3$train(maxiter = 15, M = 50, abs_tol = 1e-4, soft_init = TRUE, verbose = TRUE)
 plot(ch_vec)
 
 # Compute VCOV, print table
@@ -446,6 +447,29 @@ coef3 <- model3$coeftest(print_out = FALSE)
 # Get elasticities
 elast3_out1.ls <- get_multiv_elast(model3, 1)
 elast3_out2.ls <- get_multiv_elast(model3, 2)
+
+# Compute average inter-outcome effect of battles on violence against civilians
+interObj <- DSI$new(model3)
+ioe_vec <- rep(NA, N*TT)
+counter <- 1
+for (tt in 1:TT) {
+  for (i in 1:N) {
+    ycond_obs <- panel.df$isis_battle[counter]
+    Ey_obs <- interObj$conditional_expectation(i = ii, j = 2, t = tt, 
+                                               icond = ii, jcond = 1, tcond = tt, 
+                                               ycond = ycond_obs, M = 100)
+    Ey_cf <- interObj$conditional_expectation(i = ii, j = 2, t = tt, 
+                                              icond = ii, jcond = 1, tcond = tt, 
+                                              ycond = ycond_obs+1, M = 100)
+    ioe_vec[counter] <- Ey_cf - Ey_obs
+    counter <- counter + 1
+    print(counter)
+    flush.console()
+  }
+}
+mean(ioe_vec)
+# 0.01252709
+
 
 
 ###########################
