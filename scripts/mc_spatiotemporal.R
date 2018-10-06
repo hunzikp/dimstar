@@ -48,7 +48,7 @@ fit_dimstar <- function(data) {
   timing <- system.time({
     res <- try({
       set.seed(0)
-      model$train(maxiter = 200, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1, verbose = TRUE, soft_init = FALSE)
+      model$train(maxiter = 100, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1, verbose = TRUE, soft_init = FALSE)
       model$compute_vcov(M = 500, thinning = 5)
     }, silent = TRUE)
   })
