@@ -49,7 +49,7 @@ fit_dimstar <- function(data) {
     res <- try({
       set.seed(0)
       model$train(maxiter = 100, M = 50, abs_tol = 1e-5, burnin = 0, thinning = 1, verbose = TRUE, soft_init = FALSE)
-      model$compute_vcov(M = 500, thinning = 5)
+      model$compute_vcov(M = 300, thinning = 3)
     }, silent = TRUE)
   })
   
@@ -275,12 +275,14 @@ for (dim in unique(cov.df$dim_f)) {
 
 #################################################
 # II. EVALUATE BIAS / RMSE FOR BINARY DATA
-# Note: Needs M = 300 for SE estimation
+# Note: Needs M = 300, thinning = 3 for SE estimation
+#       Needs maxiter = 100 
 #################################################
 
 # BAUSTELLE
 # PROBLEM: STANDARD ERRORS TOO NARROW IF RHO/GAMMA = 0.45
-# POSSIBLE EXPLANATION: maxiter NOT HIGH ENOUG DURING ESTIMATION
+# POSSIBLE EXPLANATION: maxiter NOT HIGH ENOUGH DURING ESTIMATION
+# ACTUAL EXPLANATION: RMSE TOO LARGE (AND SE TOO LOW) IF OUTCOME IS HIGHLY UNBALANCED BETWEEN 0/1
 
 ###################
 # Set up configurations
@@ -290,11 +292,13 @@ for (dim in unique(cov.df$dim_f)) {
 M <- 50
 
 ## Configs
-config.df <- expand.grid(data_dim = list(list(N = 36, TT = 10, G = 1)),
-                         dep_params = list(list(rho_vec = 0.45, gamma_vec = 0.45)),
-                         beta0 = c(-0.5),
+config.df <- expand.grid(data_dim = list(list(N = 64, TT = 10, G = 1), list(N = 256, TT = 10, G = 1)),
+                         dep_params = list(list(rho_vec = 0, gamma_vec = 0),
+                                           list(rho_vec = 0.25, gamma_vec = 0.25),
+                                           list(rho_vec = 0.45, gamma_vec = 0.45)),
+                         beta0 = c(0),
                          beta1 = c(1),
-                         count = FALSE,
+                         count = TRUE,
                          seed = 1:M,
                          model = c("dimstar"),
                          stringsAsFactors = FALSE)
@@ -481,29 +485,20 @@ for (dim in unique(cov.df$dim_f)) {
 
 sample_data <- function(config) {
 
-  dd <- config$data_dim[[1]]
-  
-  if (dd$G == 1) {
-    lambda_vec <- 0
+  if (config$TT == 1) {
+    gamma_vec <- 0
   } else {
-    n_pairs <- choose(dd$G, 2)
-    lambda_vec <- rep(0.25, n_pairs)
+    gamma_vec <- 0.25
   }
+  rho_vec <- 0.25
   
-  if (dd$TT == 1) {
-    gamma_vec <- rep(0, dd$G)
-  } else {
-    gamma_vec <- rep(0.25, dd$G)
-  }
-  
-  rho_vec <- rep(0.25, dd$G)
-  
-  set.seed(config$seed)
-  beta <- c(config$beta0, config$beta1)
-  data <- simulate_data(N = dd$N, TT = dd$TT, G = dd$G, count = config$count, 
-                        rho_vec = rho_vec, lambda_vec = lambda_vec, gamma_vec = gamma_vec,
-                        beta.ls = rep(list(beta), dd$G), sigma2_vec = rep(1, dd$G), 
+  set.seed(1)
+  beta <- c(1, 1)
+  data <- simulate_data(N = config$N, TT = config$TT, G = 1L, count = TRUE, 
+                        rho_vec = rho_vec, lambda_vec = 0, gamma_vec = gamma_vec,
+                        beta.ls = list(beta), sigma2_vec = 1, 
                         X_params = c(0, 1))
+  data$beta.ls <- list(beta)
   return(data)
 }
 
@@ -513,11 +508,7 @@ sample_data <- function(config) {
 
 fit_dimstar <- function(data) {
   
-  if (data$G == 1) {
-    outcome_dep <- FALSE
-  } else {
-    outcome_dep <- TRUE
-  }
+  outcome_dep <- FALSE
   if (data$TT == 1) {
     temporal_dep <- FALSE
   } else {
@@ -525,7 +516,7 @@ fit_dimstar <- function(data) {
   }
   
   model <- DISTAR$new(X.ls = data$X.ls, y.ls = data$y.ls, W_t = data$W_t, 
-                      N = data$N, G = data$G, TT = data$TT,
+                      N = data$N, G = 1, TT = data$TT,
                       count = data$count, 
                       spatial_dep = TRUE, 
                       temporal_dep = temporal_dep, 
@@ -536,10 +527,8 @@ fit_dimstar <- function(data) {
   if (temporal_dep) {
     model$gamma_vec[] <- 0.25
   }
-  if (outcome_dep) {
-    model$lambda_vec[] <- 0.25
-  }
-  model$beta.ls <- rep(list(c(2 ,1)), data$G)
+
+  model$beta.ls <- data$beta.ls
   
   timing <- system.time({
     res <- try({
@@ -564,49 +553,12 @@ fit_dimstar <- function(data) {
 M <- 1
 
 ## Configs
-config.df <- expand.grid(data_dim = list(list(N = 64, TT = 1, G = 1),
-                                         list(N = 256, TT = 1, G = 1),
-                                         list(N = 400, TT = 1, G = 1), 
-                                         list(N = 576, TT = 1, G = 1), 
-                                         list(N = 784, TT = 1, G = 1), 
-                                         list(N = 1024, TT = 1, G = 1), 
-                                         
-                                         list(N = 64, TT = 1, G = 4),
-                                         list(N = 256, TT = 1, G = 4),
-                                         list(N = 400, TT = 1, G = 4), 
-                                         list(N = 576, TT = 1, G = 4), 
-                                         list(N = 784, TT = 1, G = 4), 
-                                         list(N = 1024, TT = 1, G = 4), 
-                                         
-                                         list(N = 64, TT = 4, G = 1), 
-                                         list(N = 64, TT = 8, G = 1),
-                                         list(N = 64, TT = 12, G = 1),
-                                         list(N = 64, TT = 16, G = 1),
-                                         list(N = 64, TT = 20, G = 1),
-                                         list(N = 64, TT = 24, G = 1),
-                                         list(N = 64, TT = 48, G = 1),
-                                         
-                                         list(N = 64, TT = 4, G = 4), 
-                                         list(N = 64, TT = 8, G = 4),
-                                         list(N = 64, TT = 12, G = 4),
-                                         list(N = 64, TT = 16, G = 4),
-                                         list(N = 64, TT = 20, G = 4),
-                                         list(N = 64, TT = 24, G = 4),
-                                         list(N = 64, TT = 48, G = 4),
-                                         
-                                         list(N = 64, TT = 1, G = 4),
-                                         list(N = 64, TT = 1, G = 8),
-                                         list(N = 64, TT = 1, G = 12),
-                                         list(N = 64, TT = 1, G = 16),
-                                         list(N = 64, TT = 1, G = 20)),
-                         beta0 = c(2),
-                         beta1 = c(1),
-                         count = TRUE,
-                         seed = 1:M,
-                         model = c("dimstar"),
-                         stringsAsFactors = FALSE)
+Nconfig.df <- expand.grid(N = seq(16, 64, 4)^2, TT = c(1, 4), experiment = "N")
+Tconfig.df <- expand.grid(N = c(256, 1024), TT = seq(5, 50, 5), experiment = "T")
+config.df <- rbind(Nconfig.df, Tconfig.df)
 config.df$iter <- 1:nrow(config.df)
 config.ls <- split(config.df, seq(nrow(config.df)))
+
 
 ###################
 # Main MC Loop
@@ -620,10 +572,8 @@ results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) 
   data <- sample_data(config)
   
   ## Fit approrpiate model
-  if (config$model == 'dimstar') {
-    results <- fit_dimstar(data)
-  }
-  
+  results <- fit_dimstar(data)
+
   ## Return result
   results
 }
@@ -634,7 +584,7 @@ results.ls <- foreach(config = iter(config.ls), .options.multicore = mcoptions) 
 
 results.df <- do.call('rbind', lapply(results.ls, function(x) as.data.frame(x[length(x)])))
 results.df <- cbind(config.df, results.df)
-saveRDS(results.df, file = 'results/mc_full_complexity_count.rds')
+saveRDS(results.df, file = 'results/mc_full_count.rds')
 
 
 ###################
@@ -645,27 +595,17 @@ library(ggplot2)
 library(gridExtra)
 
 scal.df <- results.df
-scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
-scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
-scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$TT == 1 & scal.df$G <= 4,])
-scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, G)]
+scal.dt <- data.table(scal.df[scal.df$experiment == "N",])
+scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, TT, experiment)]
+scal.dt$TTlab <- paste('T =', scal.dt$TT)
 
-scal.dt$Glab <- paste('G =', scal.dt$G)
-
-## Plot for G = 1 and G > 1
-p1 <- ggplot(data=scal.dt[scal.dt$G == 1,], aes(x=N, y=elapsed)) +
+## Plot for TT = 1 and TT > 1
+p <- ggplot(data=scal.dt, aes(x=N, y=elapsed)) +
   geom_line() +
   geom_point() + xlab("N") +
-  facet_grid( ~ Glab) +
+  facet_grid( ~ TTlab) +
   xlab("N") + ylab("Evaluation Time (seconds)")
-p2 <- ggplot(data=scal.dt[scal.dt$G == 4,], aes(x=N, y=elapsed)) +
-  geom_line() +
-  geom_point() + xlab("N") +
-  facet_grid( ~ Glab) +
-  xlab("N") + ylab("Evaluation Time (seconds)")
-p <- arrangeGrob(p1, p2, nrow=1, ncol=2) 
-ggsave(filename = "plots/mc_full_time_N.pdf", plot = p, scale = 0.75)
+ggsave(filename = "plots/mc_time_N.pdf", plot = p, scale = 0.5)
 
 
 ###################
@@ -673,43 +613,16 @@ ggsave(filename = "plots/mc_full_time_N.pdf", plot = p, scale = 0.75)
 ###################
 
 scal.df <- results.df
-scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
-scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
-scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$G <= 4,])
-scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(TT, G)]
+scal.dt <- data.table(scal.df[scal.df$experiment == "T",])
+scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(N, TT, experiment)]
+scal.dt$Nlab <- paste('N =', scal.dt$N)
+scal.dt$Nlab <- factor(x = scal.dt$Nlab, levels = unique(scal.dt$Nlab)[order(unique(scal.dt$N))])
 
-scal.dt$Glab <- paste('G =', scal.dt$G)
-
-## Plot for G = 1 and G > 1
-p1 <- ggplot(data=scal.dt[scal.dt$G == 1,], aes(x=TT, y=elapsed)) +
+## Plot
+p <- ggplot(data=scal.dt, aes(x=TT, y=elapsed)) +
   geom_line() +
-  geom_point() + 
-  facet_grid( ~ Glab) +
+  geom_point() + xlab("T") +
+  facet_grid( ~ Nlab) +
   xlab("T") + ylab("Evaluation Time (seconds)")
-p2 <- ggplot(data=scal.dt[scal.dt$G == 4,], aes(x=TT, y=elapsed)) +
-  geom_line() +
-  geom_point() + 
-  facet_grid( ~ Glab) +
-  xlab("T") + ylab("Evaluation Time (seconds)")
-p <- arrangeGrob(p1, p2, nrow=1, ncol=2) 
-ggsave(filename = "plots/mc_full_time_T.pdf", plot = p, scale = 0.75)
-
-###################
-# Plot Scalability in G
-###################
-
-scal.df <- results.df
-scal.df$N <- unlist(lapply(scal.df$data_dim, function(x) x$N))
-scal.df$TT <- unlist(lapply(scal.df$data_dim, function(x) x$TT))
-scal.df$G <- unlist(lapply(scal.df$data_dim, function(x) x$G))
-scal.dt <- data.table(scal.df[scal.df$N == 64 & scal.df$TT == 1,])
-scal.dt <- scal.dt[, j=list(elapsed = mean(elapsed, na.rm = TRUE)), by = list(G)]
-
-p <- ggplot(data=scal.dt, aes(x=G, y=elapsed)) +
-  geom_line() + 
-  geom_point() + 
-  xlab("G") + ylab("Evaluation Time (seconds)")
-p
-ggsave(filename = "plots/mc_full_time_G.pdf", plot = p, scale = 0.5)
+ggsave(filename = "plots/mc_time_T.pdf", plot = p, scale = 0.5)
 
